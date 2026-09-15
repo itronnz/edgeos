@@ -55,6 +55,7 @@ jobs:
         run: |
           mkdir -p out
           docker run --rm --privileged \
+              -e MENDER_ARTIFACT_NAME="edgeos-${{ github.sha }}" \
               -v "$PWD/build:/build" -v "$PWD/out:/out" \
               mendersoftware/mender-convert:latest \
               -i /build/edgeos-trixie-arm64.img \
