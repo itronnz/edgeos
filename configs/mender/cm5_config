@@ -1,0 +1,16 @@
+# isentinal edge — CM5 / R2145-12, Debian 13 (trixie).
+#
+# Based on mender-convert's raspberrypi4_bookworm_64bit_config: the trixie
+# boot layout matches bookworm's rule (the firmware partition mounts at
+# /boot/firmware), the eMMC is /dev/mmcblk0, and the aarch64 u-boot bundle
+# mender-convert downloads carries a Pi5-capable binary. Unproven on
+# hardware — first flash is the tryboot/U-Boot failover spike.
+
+MENDER_DEVICE_TYPE="edgeos-cm5"
+MENDER_STORAGE_DEVICE="/dev/mmcblk0"
+MENDER_BOOT_PART_SIZE_MB="256"
+MENDER_DATA_PART_SIZE_MB="2048"
+
+source configs/raspberrypi/uboot/include/bookworm_config
+source configs/raspberrypi/uboot/include/raspberrypi_64_config
+PLATFORM_MODIFY_HOOKS+=(raspberrypi_64_platform_modify)

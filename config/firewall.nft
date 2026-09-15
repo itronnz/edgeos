@@ -1,0 +1,35 @@
+#!/usr/sbin/nft -f
+# Edge appliance firewall. Inbound is almost nothing: the API, go2rtc, and
+# whatever the site opens. Cameras and outbound (uploads, NTP, DNS) are all
+# egress — nothing inbound is needed for those.
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        iif lo accept
+        ct state established,related accept
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+
+        # isentinal API + console
+        tcp dport 8080 accept
+
+        # go2rtc: api + RTSP + WebRTC
+        tcp dport 1984 accept
+        tcp dport 8554 accept
+        udp dport 8555 accept
+
+        # sshd is disabled at install; if a site re-enables it, allow only
+        # from the tower LAN — tighten this to the real subnet at enrolment.
+        # tcp dport 22 ip saddr 10.0.0.0/8 accept
+    }
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}

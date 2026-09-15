@@ -1,0 +1,111 @@
+name: build-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      hailort_version:
+        description: HailoRT/driver version to pin (container tag must match)
+        default: "4.23.0"
+      publish_mender:
+        description: Push the .mender artifact to the central Mender server
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+env:
+  HAILORT_VERSION: ${{ github.event.inputs.hailort_version || '4.23.0' }}
+  TAPPAS_VERSION: "5.1.0"
+  BOOT_MB: "256"
+  ROOTFS_MB: "2048"
+  DATA_PART_MB: "2048"
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04-arm   # native arm64 — free on this public repo
+    permissions:
+      contents: write           # for `gh release create` on tag pushes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap qemu-user-static \
+              kpartx parted dosfstools e2fsprogs rsync device-tree-compiler
+
+      - name: provisioned rootfs (cached on pins + scripts)
+        id: rootfs
+        run: |
+          echo "key=rootfs-${{ runner.arch }}-${{ env.HAILORT_VERSION }}-\
+          ${{ env.TAPPAS_VERSION }}-${{ hashFiles('scripts/provision.sh') }}" \
+            >> "$GITHUB_OUTPUT"
+
+      # The rootfs is root-owned (it's a chroot) — actions/cache runs
+      # unprivileged and would save a partial archive, so we tar it as root
+      # and cache the single archive file instead.
+      - uses: actions/cache@v4
+        id: rootfs-cache
+        with:
+          path: build/rootfs.tzst
+          key: ${{ steps.rootfs.outputs.key }}
+
+      - name: restore rootfs
+        if: steps.rootfs-cache.outputs.cache-hit == 'true'
+        run: sudo tar --use-compress-program zstdmt -C build -xf build/rootfs.tzst
+
+      - name: make rootfs
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: sudo -E scripts/make-rootfs.sh build/rootfs
+
+      - name: pack rootfs for cache
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: sudo tar --posix --use-compress-program zstdmt -C build -cf build/rootfs.tzst rootfs
+
+      - name: make image
+        run: sudo -E scripts/make-image.sh build/rootfs build/edgeos-trixie-arm64.img
+
+      - name: mender-convert
+        run: |
+          mkdir -p out
+          docker run --rm --privileged \
+              -e MENDER_ARTIFACT_NAME="edgeos-${{ github.sha }}" \
+              -v "$PWD/build:/build" \
+              -v "$PWD/out:/mender-convert/output" \
+              -v "$PWD/configs/mender:/mender-convert/configs/edgeos" \
+              mendersoftware/mender-convert:latest \
+              --disk-image /build/edgeos-trixie-arm64.img \
+              --config configs/edgeos/cm5_config
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edgeos-${{ github.sha }}
+          path: |
+            build/edgeos-trixie-arm64.img
+            out/*.img
+            out/*.mender
+
+      # Versioned release: `git tag v0.1.0 && git push --tags` on main
+      # publishes the image + mender artifact as a GitHub Release.
+      - name: release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+              build/edgeos-trixie-arm64.img out/*.img out/*.mender \
+              --title "edgeos ${GITHUB_REF_NAME}" \
+              --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: publish artifact to Mender
+        if: inputs.publish_mender
+        env:
+          MENDER_SERVER_URL: ${{ secrets.MENDER_SERVER_URL }}
+          MENDER_JWT: ${{ secrets.MENDER_JWT }}
+        run: |
+          curl -fsSL -X POST "$MENDER_SERVER_URL/api/management/v1/deployments/artifacts" \
+              -H "Authorization: Bearer $MENDER_JWT" \
+              -F "size=$(stat -c%s out/*.mender)" \
+              -F "artifact=@out/*.mender"
