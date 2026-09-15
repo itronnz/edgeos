@@ -35,12 +35,15 @@ printf 'APT::Key::gpgvcommand "/usr/bin/gpgv";\n' > /etc/apt/apt.conf.d/99gpgv-v
 install -d /usr/share/keyrings
 # apt's signed-by wants an OpenPGP keyring — raspberrypi.gpg.key may be
 # armored or a keybox, so normalize through gpg import/export.
+# GNUPGHOME is scoped to /tmp: callers like `sudo -E` can leak a HOME that
+# doesn't exist inside the chroot.
+export GNUPGHOME=$(mktemp -d)
 curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
     -o /tmp/rpi-archive.key
 gpg --no-default-keyring --keyring /tmp/rpi-import.gpg --import /tmp/rpi-archive.key
 gpg --no-default-keyring --keyring /tmp/rpi-import.gpg --export \
     -o /usr/share/keyrings/raspberrypi-archive-keyring.gpg
-rm -f /tmp/rpi-archive.key /tmp/rpi-import.gpg*
+rm -rf /tmp/rpi-archive.key /tmp/rpi-import.gpg* "$GNUPGHOME"
 cat > /etc/apt/sources.list.d/hailo.list <<EOF
 deb [signed-by=/usr/share/keyrings/raspberrypi-archive-keyring.gpg] $HAILO_APT_REPO $HAILO_APT_SUITE main
 EOF
