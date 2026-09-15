@@ -62,10 +62,31 @@ apt-get install -y --no-install-recommends \
 # kernel by DKMS — needs the headers above plus a compiler). hailort userspace
 # is also installed so the host can talk to the device for diagnostics, and so
 # the container image can pin to the same version tag.
+#
+# The driver postinst builds against $(uname -r) — inside a build chroot
+# that's the *host's* kernel (CI runner, workstation), not the image's. Two
+# shims make it work: point that name at the target kernel's headers so its
+# make/dkms resolve correctly, and stub modprobe (a syscall that can't
+# succeed in a chroot, whose failure under `set -e` kills the postinst).
+BUILD_KVER=$(uname -r)
+RPI_KVER=$(ls /lib/modules | grep 'rpi-2712' | head -1)
+mkdir -p "/lib/modules/$BUILD_KVER"
+ln -sfn "/lib/modules/$RPI_KVER/build" "/lib/modules/$BUILD_KVER/build"
+mkdir -p /tmp/kbuild-stubs
+printf '#!/bin/sh\nexit 0\n' > /tmp/kbuild-stubs/modprobe
+chmod +x /tmp/kbuild-stubs/modprobe
+export PATH=/tmp/kbuild-stubs:$PATH
+
 apt-get install -y --no-install-recommends \
     dkms gcc make \
     "hailort-pcie-driver=$HAILORT_VERSION" "hailort=$HAILORT_VERSION" \
     || { cat /var/log/hailort-pcie-driver.deb.log 2>/dev/null; false; }
+
+# Cleanup: the module the postinst built landed under the build host's
+# module dir — drop it and install properly for the image's kernel.
+rm -rf "/lib/modules/$BUILD_KVER" /tmp/kbuild-stubs
+export PATH=${PATH#/tmp/kbuild-stubs:}
+dkms autoinstall -k "$RPI_KVER"
 
 dkms status | tee /root/dkms-status.txt
 grep -q hailo /root/dkms-status.txt || {
