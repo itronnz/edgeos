@@ -1,0 +1,33 @@
+[Unit]
+Description=isentinal edge
+After=network-online.target var-recordings.mount
+Wants=network-online.target
+
+[Container]
+Image=registry.example/isentinal-edge:0.1.0-hailort4.23
+Network=host
+
+# Hailo-8 on the CM5's external PCIe port, plus the two rpivid V4L2 stateless
+# decoder nodes (verify which carry v4l2slh265dec with
+# `v4l2-ctl --list-devices` on the unit).
+AddDevice=/dev/hailo0
+AddDevice=/dev/video19
+AddDevice=/dev/video20
+
+Volume=/var/recordings:/var/recordings
+Volume=/etc/isentinal:/etc/isentinal
+Volume=/var/lib/isentinal:/var/lib/isentinal
+
+# Registry tag bumps roll out with `podman auto-update`, driven from central.
+AutoUpdate=registry
+
+HealthCmd=/usr/bin/curl -fsS http://localhost:8080/api/resources
+HealthInterval=1m
+HealthRetries=3
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
