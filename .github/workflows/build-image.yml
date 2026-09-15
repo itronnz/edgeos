@@ -40,13 +40,26 @@ jobs:
           ${{ env.TAPPAS_VERSION }}-${{ hashFiles('scripts/provision.sh') }}" \
             >> "$GITHUB_OUTPUT"
 
+      # The rootfs is root-owned (it's a chroot) — actions/cache runs
+      # unprivileged and would save a partial archive, so we tar it as root
+      # and cache the single archive file instead.
       - uses: actions/cache@v4
+        id: rootfs-cache
         with:
-          path: build/rootfs
+          path: build/rootfs.tzst
           key: ${{ steps.rootfs.outputs.key }}
 
+      - name: restore rootfs
+        if: steps.rootfs-cache.outputs.cache-hit == 'true'
+        run: sudo tar --use-compress-program zstdmt -C build -xf build/rootfs.tzst
+
       - name: make rootfs
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
         run: sudo -E scripts/make-rootfs.sh build/rootfs
+
+      - name: pack rootfs for cache
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: sudo tar --posix --use-compress-program zstdmt -C build -cf build/rootfs.tzst rootfs
 
       - name: make image
         run: sudo -E scripts/make-image.sh build/rootfs build/edgeos-trixie-arm64.img
