@@ -12,6 +12,7 @@ on:
         default: false
   push:
     branches: [main]
+  pull_request:
 
 env:
   HAILORT_VERSION: ${{ github.event.inputs.hailort_version || '4.23.0' }}
