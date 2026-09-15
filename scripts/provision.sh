@@ -66,16 +66,17 @@ apt-get install -y --no-install-recommends \
 # The driver postinst builds against $(uname -r) — inside a build chroot
 # that's the *host's* kernel (CI runner, workstation), not the image's. Two
 # shims make it work: point that name at the target kernel's headers so its
-# make/dkms resolve correctly, and stub modprobe (a syscall that can't
-# succeed in a chroot, whose failure under `set -e` kills the postinst).
+# make/dkms resolve correctly, and no-op modprobe for the install (loading
+# the just-built module can't succeed in a chroot — a vermagic-mismatched
+# insert at best — and `set -e` makes that fatal). dpkg-divert rather than a
+# PATH stub, because dpkg sanitizes the maintainer-script environment.
 BUILD_KVER=$(uname -r)
 RPI_KVER=$(ls /lib/modules | grep 'rpi-2712' | head -1)
 mkdir -p "/lib/modules/$BUILD_KVER"
 ln -sfn "/lib/modules/$RPI_KVER/build" "/lib/modules/$BUILD_KVER/build"
-mkdir -p /tmp/kbuild-stubs
-printf '#!/bin/sh\nexit 0\n' > /tmp/kbuild-stubs/modprobe
-chmod +x /tmp/kbuild-stubs/modprobe
-export PATH=/tmp/kbuild-stubs:$PATH
+dpkg-divert --local --rename --divert /usr/sbin/modprobe.dpkg-real /usr/sbin/modprobe
+printf '#!/bin/sh\nexit 0\n' > /usr/sbin/modprobe
+chmod +x /usr/sbin/modprobe
 
 apt-get install -y --no-install-recommends \
     dkms gcc make \
@@ -83,9 +84,11 @@ apt-get install -y --no-install-recommends \
     || { cat /var/log/hailort-pcie-driver.deb.log 2>/dev/null; false; }
 
 # Cleanup: the module the postinst built landed under the build host's
-# module dir — drop it and install properly for the image's kernel.
-rm -rf "/lib/modules/$BUILD_KVER" /tmp/kbuild-stubs
-export PATH=${PATH#/tmp/kbuild-stubs:}
+# module dir — drop it and install properly for the image's kernel, then
+# put the real modprobe back.
+rm -rf "/lib/modules/$BUILD_KVER"
+rm -f /usr/sbin/modprobe
+dpkg-divert --local --rename --remove /usr/sbin/modprobe
 dkms autoinstall -k "$RPI_KVER"
 
 dkms status | tee /root/dkms-status.txt
