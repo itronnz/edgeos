@@ -20,9 +20,14 @@ CONFIG_TXT=${CONFIG_TXT:-/boot/firmware/config.txt}
 
 apt-get update
 apt-get install -y --no-install-recommends \
-    ca-certificates curl gnupg
+    ca-certificates curl gnupg gpgv
 
 # --- Hailo package source ---------------------------------------------------
+# The Raspberry Pi archive key still carries SHA1 self-signatures, which
+# trixie's default sqv verifier rejects (SHA1 cutoff). Point apt's verifier
+# at gpgv instead — signatures are still checked, only the deprecation
+# policy differs. Remove this when archive.raspberrypi.com re-signs.
+printf 'Dir::Bin::gpg "/usr/bin/gpgv";\n' > /etc/apt/apt.conf.d/99gpgv-verifier
 # hailo-all for Debian 13 is distributed through the Raspberry Pi apt repo
 # (that's what the R2145's shipped install pulls). Signed by the RPi archive
 # key; if a different Hailo feed is used, set HAILO_APT_REPO/HAILO_APT_SUITE
