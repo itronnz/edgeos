@@ -33,8 +33,14 @@ printf 'APT::Key::gpgvcommand "/usr/bin/gpgv";\n' > /etc/apt/apt.conf.d/99gpgv-v
 # key; if a different Hailo feed is used, set HAILO_APT_REPO/HAILO_APT_SUITE
 # and drop in the matching keyring instead.
 install -d /usr/share/keyrings
+# apt's signed-by wants an OpenPGP keyring — raspberrypi.gpg.key may be
+# armored or a keybox, so normalize through gpg import/export.
 curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
+    -o /tmp/rpi-archive.key
+gpg --no-default-keyring --keyring /tmp/rpi-import.gpg --import /tmp/rpi-archive.key
+gpg --no-default-keyring --keyring /tmp/rpi-import.gpg --export \
     -o /usr/share/keyrings/raspberrypi-archive-keyring.gpg
+rm -f /tmp/rpi-archive.key /tmp/rpi-import.gpg*
 cat > /etc/apt/sources.list.d/hailo.list <<EOF
 deb [signed-by=/usr/share/keyrings/raspberrypi-archive-keyring.gpg] $HAILO_APT_REPO $HAILO_APT_SUITE main
 EOF
