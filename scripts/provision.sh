@@ -55,7 +55,7 @@ apt-get update
 # specifically, and rpivid's stateless HEVC decoder is in that tree anyway.
 apt-get install -y --no-install-recommends \
     raspi-firmware \
-    raspberrypi-kernel raspberrypi-kernel-headers
+    linux-image-rpi-2712 linux-headers-rpi-2712
 
 # --- Hailo: host side -------------------------------------------------------
 # Kernel module stays on the host (hailo_pci.ko is built against the image's
