@@ -52,11 +52,15 @@ Locally, on an arm64 host or with `qemu-aarch64-static` + binfmt:
 ```sh
 sudo scripts/make-rootfs.sh build/rootfs
 sudo scripts/make-image.sh build/rootfs build/edgeos-trixie-arm64.img
-# then mender-convert for the A/B layout:
-docker run --rm --privileged -v $PWD/build:/build -v $PWD/out:/out \
+# then mender-convert for the A/B layout (configs/mender/cm5_config is ours):
+docker run --rm --privileged \
+    -e MENDER_ARTIFACT_NAME="edgeos-local" \
+    -v $PWD/build:/build \
+    -v $PWD/out:/mender-convert/output \
+    -v $PWD/configs/mender:/mender-convert/configs/edgeos \
     mendersoftware/mender-convert:latest \
-    -i /build/edgeos-trixie-arm64.img --output-dir /out \
-    --config boot-part=256M --config data-part=2048M
+    --disk-image /build/edgeos-trixie-arm64.img \
+    --config configs/edgeos/cm5_config
 ```
 
 ## Flash

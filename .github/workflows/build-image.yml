@@ -56,12 +56,12 @@ jobs:
           mkdir -p out
           docker run --rm --privileged \
               -e MENDER_ARTIFACT_NAME="edgeos-${{ github.sha }}" \
-              -v "$PWD/build:/build" -v "$PWD/out:/out" \
+              -v "$PWD/build:/build" \
+              -v "$PWD/out:/mender-convert/output" \
+              -v "$PWD/configs/mender:/mender-convert/configs/edgeos" \
               mendersoftware/mender-convert:latest \
-              -i /build/edgeos-trixie-arm64.img \
-              --output-dir /out \
-              --config boot-part=${BOOT_MB}M \
-              --config data-part=${DATA_PART_MB}M
+              --disk-image /build/edgeos-trixie-arm64.img \
+              --config configs/edgeos/cm5_config
 
       - uses: actions/upload-artifact@v4
         with:
