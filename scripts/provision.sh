@@ -50,14 +50,12 @@ EOF
 apt-get update
 
 # --- kernel + firmware ------------------------------------------------------
-# raspi-firmware carries the CM5 boot firmware and device trees into
-# /boot/firmware; linux-image/headers-arm64 is Debian's mainline kernel with
-# BCM2712 support (PCIe + rpivid stateless HEVC decode). If the target ships a
-# raspberrypi vendor kernel instead, swap for linux-image-rpi-* and its
-# headers — DKMS builds against whatever's in /lib/modules.
+# The R2145's shipped install runs the Raspberry Pi vendor kernel — the
+# hailort-pcie-driver postinst looks for raspberrypi-kernel-headers
+# specifically, and rpivid's stateless HEVC decoder is in that tree anyway.
 apt-get install -y --no-install-recommends \
     raspi-firmware \
-    linux-image-arm64 linux-headers-arm64
+    raspberrypi-kernel raspberrypi-kernel-headers
 
 # --- Hailo: host side -------------------------------------------------------
 # Kernel module stays on the host (hailo_pci.ko is built against the image's
@@ -66,7 +64,8 @@ apt-get install -y --no-install-recommends \
 # the container image can pin to the same version tag.
 apt-get install -y --no-install-recommends \
     dkms gcc make \
-    "hailort-pcie-driver=$HAILORT_VERSION" "hailort=$HAILORT_VERSION"
+    "hailort-pcie-driver=$HAILORT_VERSION" "hailort=$HAILORT_VERSION" \
+    || { cat /var/log/hailort-pcie-driver.deb.log 2>/dev/null; false; }
 
 dkms status | tee /root/dkms-status.txt
 grep -q hailo /root/dkms-status.txt || {
