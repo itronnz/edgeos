@@ -15,7 +15,6 @@ HAILORT_VERSION=${HAILORT_VERSION:-4.23.0}
 TAPPAS_VERSION=${TAPPAS_VERSION:-5.1.0}
 HAILO_APT_REPO=${HAILO_APT_REPO:-http://archive.raspberrypi.com/debian}
 HAILO_APT_SUITE=${HAILO_APT_SUITE:-trixie}
-MENDER_DEB_URL=${MENDER_DEB_URL:-}
 CONFIG_TXT=${CONFIG_TXT:-/boot/firmware/config.txt}
 
 apt-get update
@@ -126,17 +125,9 @@ apt-get install -y --no-install-recommends \
     chrony nftables \
     sudo
 
-# Mender client — the Debian package name and repo suite for trixie aren't
-# settled in Mender's feeds; install the standalone deb, or point
-# MENDER_DEB_URL at the current artifact. Absent means the image ships
-# without OTA until this is pinned — flagged loudly, not silently.
-if [[ -n $MENDER_DEB_URL ]]; then
-    curl -fsSL "$MENDER_DEB_URL" -o /tmp/mender-client.deb
-    apt-get install -y /tmp/mender-client.deb
-    rm /tmp/mender-client.deb
-else
-    echo "WARN: MENDER_DEB_URL unset — image has no Mender client" >&2
-fi
+# The Mender client itself is NOT installed here — mender-convert injects it
+# (from Mender's own apt feed) when it converts this image, so an unconverted
+# image is just the minimal appliance.
 
 # --- edge service -----------------------------------------------------------
 install -D -m644 /mnt/edgeos/systemd/isentinal-edge.container \

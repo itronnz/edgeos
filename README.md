@@ -82,11 +82,14 @@ mender-device show-provides               # once enrolled
 
 ## Still to prove on hardware
 
-- `mender-convert`'s RPi A/B wiring (tryboot/U-Boot failover) on this exact
-  Debian image — the design is sound, the partition/bootloader details are
-  the unbuilt part.
-- The kernel/firmware package set in `provision.sh` assumes Debian's
-  `raspi-firmware` + `linux-image-arm64`; if the unit ships a vendor
-  raspberrypi kernel, swap the package names (DKMS rebuilds either way).
-- `MENDER_DEB_URL` — pin the current client artifact URL; absent means the
-  image builds without OTA (warned, not silent).
+- The U-Boot A/B failover on a real CM5 — mender-convert now runs
+  end-to-end (`configs/mender/cm5_config`, an rpi64 U-Boot bundle, and
+  the Pi firmware booting `kernel8.img` = u-boot.bin), but whether that
+  U-Boot build loads our vmlinux + rolls back correctly on this exact
+  image is only proven by flashing one.
+- Whether `bcm2712-rpi-cm5-cm5io.dtb` (or another of the shipped 2712
+  dtbs) describes the R2145's carrier exactly — Seeed's own image may
+  carry a carrier-specific overlay we don't know about yet.
+- The `+rpt1` package variants the RPi repo substitutes for Debian's
+  (glibc among them) — expected on RPi OS, worth a glance that nothing
+  else needs pinning.

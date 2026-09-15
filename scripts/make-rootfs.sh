@@ -45,5 +45,4 @@ env \
     TAPPAS_VERSION="${TAPPAS_VERSION:-5.1.0}" \
     HAILO_APT_REPO="${HAILO_APT_REPO:-http://archive.raspberrypi.com/debian}" \
     HAILO_APT_SUITE="${HAILO_APT_SUITE:-trixie}" \
-    MENDER_DEB_URL="${MENDER_DEB_URL:-}" \
     chroot "$ROOTFS" /bin/bash /mnt/edgeos/scripts/provision.sh
