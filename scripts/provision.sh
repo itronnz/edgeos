@@ -50,9 +50,10 @@ EOF
 apt-get update
 
 # --- kernel + firmware ------------------------------------------------------
-# The R2145's shipped install runs the Raspberry Pi vendor kernel — the
-# hailort-pcie-driver postinst looks for raspberrypi-kernel-headers
-# specifically, and rpivid's stateless HEVC decoder is in that tree anyway.
+# The R2145's shipped install runs the Raspberry Pi vendor kernel
+# (linux-image-rpi-2712 + headers from archive.raspberrypi.com) — rpivid's
+# stateless HEVC decoder is in that tree, and the hailort-pcie-driver DKMS
+# build needs the matching headers.
 apt-get install -y --no-install-recommends \
     raspi-firmware \
     linux-image-rpi-2712 linux-headers-rpi-2712
@@ -97,6 +98,28 @@ grep -q hailo /root/dkms-status.txt || {
     exit 1
 }
 
+# --- firmware partition payload ----------------------------------------------
+# The kernel/firmware packages only stage files — the hooks that copy them
+# onto the real boot partition don't run under debootstrap (the raspi-
+# firmware hook exits early without an initramfs, which the Pi kernel
+# doesn't use). Populate it the way RPi OS does so the image boots bare
+# metal AND so mender-convert's U-Boot path finds what it reads:
+# kernel8.img + bcm2712 dtbs + overlays + the VideoCore start/fixup blobs
+# + cmdline.txt + config.txt.
+FW=/boot/firmware
+install -d "$FW" "$FW/overlays"
+cp "/boot/vmlinuz-$RPI_KVER" "$FW/kernel8.img"
+cp /usr/lib/modules/"$RPI_KVER"/dtb/broadcom/bcm2712*.dtb "$FW/"
+cp -a /usr/lib/modules/"$RPI_KVER"/dtb/overlays/. "$FW/overlays/"
+cp -a /usr/lib/raspi-firmware/. "$FW/"
+[[ -f $FW/start4.elf && -f $FW/fixup4.dat ]] || {
+    echo "VideoCore firmware blobs did not land in $FW" >&2
+    exit 1
+}
+cat > "$FW/cmdline.txt" <<EOF
+console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 fsck.repair=yes rootwait
+EOF
+
 # --- runtime + services -----------------------------------------------------
 apt-get install -y --no-install-recommends \
     podman fuse-overlayfs \
@@ -126,13 +149,18 @@ grep -q '/var/recordings' /etc/fstab || cat >> /etc/fstab <<'EOF'
 /dev/sda1   /var/recordings   ext4   defaults,noatime   0 2
 EOF
 
-# --- PCIe Gen 3 for the Hailo link ------------------------------------------
-# CM5 negotiates Gen 2 by default; the card links Gen 3 only when firmware
-# says so. x1 width is the board's wiring, not a config failure.
-mkdir -p "$(dirname "$CONFIG_TXT")"
-touch "$CONFIG_TXT"
-sed -i '/^dtparam=pciex1_gen=3/d' "$CONFIG_TXT"
-printf 'dtparam=pciex1_gen=3\n' >> "$CONFIG_TXT"
+# --- firmware config.txt ----------------------------------------------------
+# pciex1_gen=3: the CM5 negotiates PCIe Gen 2 by default; the Hailo links
+# Gen 3 only when firmware says so. (x1 width is the board's wiring.)
+# kernel= names kernel8.img both for direct firmware boot of this image
+# and because mender-convert swaps that name out for u-boot.bin.
+cat > "$CONFIG_TXT" <<EOF
+arm_64bit=1
+enable_uart=1
+upstream_kernel=1
+kernel=kernel8.img
+dtparam=pciex1_gen=3
+EOF
 
 # --- hardening --------------------------------------------------------------
 # No sshd by default — console enrolment happens at first boot; a jump host
